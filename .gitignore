@@ -60,10 +60,12 @@ typings/
 # next.js build output
 .next
 
+package-lock.json
+
 auth.json
 
 temp/
 
 parrotbot.db
 
-Parrot-*.json
+google_app_credentials.json

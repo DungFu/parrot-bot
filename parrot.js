@@ -1,12 +1,17 @@
+const path = require('path');
+process.env['GOOGLE_APPLICATION_CREDENTIALS'] = path.resolve(__dirname, 'google_app_credentials.json')
+
 const fs = require('fs');
+const rimraf = require('rimraf');
 const auth = require('./auth.json');
 const uuidv4 = require('uuid/v4');
-const path = require('path');
 const textToSpeech = require('@google-cloud/text-to-speech');
 
 const Discord = require('discord.js');
 const client = new Discord.Client();
 const ttsClient = new textToSpeech.TextToSpeechClient();
+
+const audioTempDir = './temp';
 
 const queuedMessages = [];
 
@@ -241,13 +246,13 @@ function processMessage(msg) {
               return;
             }
 
-            if (!fs.existsSync('./temp')) {
-              fs.mkdirSync('./temp');
+            if (!fs.existsSync(audioTempDir)) {
+              fs.mkdirSync(audioTempDir);
             }
            
             // Write the binary audio content to a local file
             const filename = uuidv4() + '.mp3';
-            const filepath = path.join('./temp', filename);
+            const filepath = path.join(audioTempDir, filename);
             fs.writeFile(filepath, response.audioContent, 'binary', err => {
               if (err) {
                 console.error('ERROR:', err);
@@ -263,7 +268,7 @@ function processMessage(msg) {
               currentStreamDispatcher.on("end", end => {
                 busy = false;
                 currentStreamDispatcher = null;
-                // fs.unlinkSync(filepath);
+                deleteOldFiles();
                 processMessageQueue();
                 maybeLeaveVoice(voiceChannel);
               });
@@ -300,6 +305,28 @@ function processMessageQueue() {
       processMessageQueue();
     }
   }
+}
+
+function deleteOldFiles() {
+  fs.readdir(audioTempDir, function(err, files) {
+    files.forEach(function(file, index) {
+      fs.stat(path.join(audioTempDir, file), function(err, stat) {
+        var endTime, now;
+        if (err) {
+          return console.error(err);
+        }
+        now = new Date().getTime();
+        endTime = new Date(stat.ctime).getTime() + 300000;
+        if (now > endTime) {
+          return rimraf(path.join(audioTempDir, file), function(err) {
+            if (err) {
+              return console.error(err);
+            }
+          });
+        }
+      });
+    });
+  });
 }
 
 client.login(auth.token);
