@@ -64,4 +64,6 @@ auth.json
 
 temp/
 
+parrotbot.db
+
 Parrot-*.json
