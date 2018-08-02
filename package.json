@@ -1,0 +1,14 @@
+{
+  "name": "parrot-bot",
+  "version": "1.0.0",
+  "description": "Text to speech at your command in discord!",
+  "main": "parrot.js",
+  "author": "Frederick Meyer",
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^0.3.0",
+    "discord.js": "^11.3.2",
+    "node-opus": "^0.3.0",
+    "sqlite3": "^4.0.2",
+    "uuid": "^3.3.2"
+  }
+}
