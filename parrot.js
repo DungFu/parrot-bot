@@ -222,7 +222,7 @@ function processMessage(msg) {
         `);
         break;
     }
-  } else {
+  } else if (voiceChannel) {
     getUser(msg.author.id, user => {
       if (user && user.tts_enabled) {
         if (busy) {
