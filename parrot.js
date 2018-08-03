@@ -16,9 +16,12 @@ const audioTempDir = './temp';
 const queuedMessages = {};
 const busy = {};
 const currentStreamDispatcher = {};
+const lastMessageTimeouts = {};
 
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('parrotbot.db');
+
+const TIMEOUT_DISCONNECT = 15 * 60 * 1000; // 15 min
 
 db.run("CREATE TABLE IF NOT EXISTS Users(id TEXT PRIMARY KEY, language TEXT, voice TEXT, tts_enabled BOOL)");
 
@@ -287,6 +290,16 @@ function processMessage(msg) {
                 deleteOldFiles();
                 processMessageQueue(serverId);
                 maybeLeaveVoice(guild);
+                if (lastMessageTimeouts[serverId]) {
+                  clearTimeout(lastMessageTimeouts[serverId]);
+                  lastMessageTimeouts[serverId] = null;
+                }
+                lastMessageTimeouts[serverId] = client.setInterval(() => {
+                  if (guild.voiceConnection) {
+                    guild.voiceConnection.disconnect();
+                  }
+                  lastMessageTimeouts[serverId] = null;
+                }, TIMEOUT_DISCONNECT);
               });
             });
           });
