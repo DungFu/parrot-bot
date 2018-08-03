@@ -30,6 +30,12 @@ client.on('message', msg => {
   processMessage(msg);
 });
 
+client.on('voiceStateUpdate', (oldMember, newMember) => {
+  if (newMember.voiceChannel === undefined) {
+    maybeLeaveVoice(newMember.guild);
+  }
+});
+
 client.on('error', console.error);
 
 function getValidVoices(callback, options = {}) {
@@ -147,7 +153,8 @@ function setVoice(userId, voice, callback, options = {}) {
 
 function processMessage(msg) {
   const voiceChannel = msg.member.voiceChannel;
-  const serverId = msg.member.guild.id;
+  const guild = msg.member.guild;
+  const serverId = guild.id;
   if (queuedMessages[serverId] === undefined) {
     queuedMessages[serverId] = [];
   }
@@ -162,7 +169,7 @@ function processMessage(msg) {
       case 'tts':
         toggleUserTtsEnabled(msg.author.id, tts_enabled => {
           msg.channel.send('Text to speech ' + (tts_enabled ? 'enabled' : 'disabled') + ' for ' + msg.author.username);
-          maybeLeaveVoice(voiceChannel);
+          maybeLeaveVoice(guild);
         });
         break;
       case 'stop':
@@ -176,6 +183,11 @@ function processMessage(msg) {
         }
         if (currentStreamDispatcher[serverId]) {
           currentStreamDispatcher[serverId].end();
+        }
+        break;
+      case 'leave':
+        if (guild.voiceConnection) {
+          guild.voiceConnection.disconnect();
         }
         break;
       case 'random':
@@ -216,6 +228,7 @@ function processMessage(msg) {
           !tts : enabled/disable text to speech
           !stop : stop playing current text to speech message
           !clear : stop playing current message and cancel all messages in the queue
+          !leave : forces parrot bot to leave the voice channel
           !random : choose a random new voice
           
           The next settings all relate to the voice
@@ -245,7 +258,7 @@ function processMessage(msg) {
               console.error('ERROR:', err);
               busy[serverId] = false;
               processMessageQueue(serverId);
-              maybeLeaveVoice(voiceChannel);
+              maybeLeaveVoice(guild);
               return;
             }
 
@@ -261,7 +274,7 @@ function processMessage(msg) {
                 console.error('ERROR:', err);
                 busy[serverId] = false;
                 processMessageQueue(serverId);
-                maybeLeaveVoice(voiceChannel);
+                maybeLeaveVoice(guild);
                 return;
               }
               if (currentStreamDispatcher[serverId]) {
@@ -273,7 +286,7 @@ function processMessage(msg) {
                 currentStreamDispatcher[serverId] = null;
                 deleteOldFiles();
                 processMessageQueue(serverId);
-                maybeLeaveVoice(voiceChannel);
+                maybeLeaveVoice(guild);
               });
             });
           });
@@ -281,22 +294,33 @@ function processMessage(msg) {
           console.log(err);
           busy[serverId] = false;
           processMessageQueue(serverId);
-          maybeLeaveVoice(voiceChannel);
+          maybeLeaveVoice(guild);
         });
       }
     });
   }
 }
 
-function maybeLeaveVoice(voiceChannel) {
-  db.all('SELECT * FROM Users WHERE tts_enabled = ?', [true], function(err, rows) {
+function maybeLeaveVoice(guild) {
+  const userIds = [];
+  guild.members.forEach(function(guildMember, guildMemberId) {
+    if (guildMember.voiceChannelID) {
+      userIds.push(guildMemberId);
+    }
+  })
+  if (userIds.length === 0) {
+    if (guild.voiceConnection) {
+      guild.voiceConnection.disconnect();
+    }
+    return;
+  }
+  db.all(
+    'SELECT * FROM Users WHERE tts_enabled = ? AND id IN ( ' + userIds.map(function(){ return '?' }).join(',') + ' )', [true].concat(userIds), function(err, rows) {
     if (err) {
       return console.log(err.message);
     }
-    if (rows.length === 0) {
-      voiceChannel.join().then(connection => {
-        voiceChannel.leave();
-      });
+    if (rows.length === 0 && guild.voiceConnection) {
+      guild.voiceConnection.disconnect();
     }
   });
 }
