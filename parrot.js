@@ -13,10 +13,9 @@ const ttsClient = new textToSpeech.TextToSpeechClient();
 
 const audioTempDir = './temp';
 
-const queuedMessages = [];
-
-let busy = false;
-let currentStreamDispatcher = null;
+const queuedMessages = {};
+const busy = {};
+const currentStreamDispatcher = {};
 
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('parrotbot.db');
@@ -148,6 +147,10 @@ function setVoice(userId, voice, callback, options = {}) {
 
 function processMessage(msg) {
   const voiceChannel = msg.member.voiceChannel;
+  const serverId = msg.member.guild.id;
+  if (queuedMessages[serverId] === undefined) {
+    queuedMessages[serverId] = [];
+  }
   if (msg.content.substring(0, 1) == '!') {
     var args = msg.content.substring(1).split(' ');
     var cmd = args[0];
@@ -163,16 +166,16 @@ function processMessage(msg) {
         });
         break;
       case 'stop':
-        if (currentStreamDispatcher !== null) {
-          currentStreamDispatcher.end();
+        if (currentStreamDispatcher[serverId]) {
+          currentStreamDispatcher[serverId].end();
         }
         break;
       case 'clear':
-        while (queuedMessages.length > 0) {
-          queuedMessages.pop();
+        while (queuedMessages[serverId].length > 0) {
+          queuedMessages[serverId].pop();
         }
-        if (currentStreamDispatcher !== null) {
-          currentStreamDispatcher.end();
+        if (currentStreamDispatcher[serverId]) {
+          currentStreamDispatcher[serverId].end();
         }
         break;
       case 'random':
@@ -225,11 +228,11 @@ function processMessage(msg) {
   } else if (voiceChannel) {
     getUser(msg.author.id, user => {
       if (user && user.tts_enabled) {
-        if (busy) {
-          queuedMessages.push(msg);
+        if (busy[serverId]) {
+          queuedMessages[serverId].push(msg);
           return;
         }
-        busy = true;
+        busy[serverId] = true;
         voiceChannel.join().then(connection => {
           const voiceObj = {languageCode: user.language, name: user.voice};
           const request = {
@@ -240,8 +243,8 @@ function processMessage(msg) {
           ttsClient.synthesizeSpeech(request, (err, response) => {
             if (err) {
               console.error('ERROR:', err);
-              busy = false;
-              processMessageQueue();
+              busy[serverId] = false;
+              processMessageQueue(serverId);
               maybeLeaveVoice(voiceChannel);
               return;
             }
@@ -256,28 +259,28 @@ function processMessage(msg) {
             fs.writeFile(filepath, response.audioContent, 'binary', err => {
               if (err) {
                 console.error('ERROR:', err);
-                busy = false;
-                processMessageQueue();
+                busy[serverId] = false;
+                processMessageQueue(serverId);
                 maybeLeaveVoice(voiceChannel);
                 return;
               }
-              if (currentStreamDispatcher !== null) {
-                currentStreamDispatcher.end();
+              if (currentStreamDispatcher[serverId]) {
+                currentStreamDispatcher[serverId].end();
               }
-              currentStreamDispatcher = connection.playFile(filepath);
-              currentStreamDispatcher.on("end", end => {
-                busy = false;
-                currentStreamDispatcher = null;
+              currentStreamDispatcher[serverId] = connection.playFile(filepath);
+              currentStreamDispatcher[serverId].on("end", end => {
+                busy[serverId] = false;
+                currentStreamDispatcher[serverId] = null;
                 deleteOldFiles();
-                processMessageQueue();
+                processMessageQueue(serverId);
                 maybeLeaveVoice(voiceChannel);
               });
             });
           });
         }).catch(err => {
           console.log(err);
-          busy = false;
-          processMessageQueue();
+          busy[serverId] = false;
+          processMessageQueue(serverId);
           maybeLeaveVoice(voiceChannel);
         });
       }
@@ -298,11 +301,11 @@ function maybeLeaveVoice(voiceChannel) {
   });
 }
 
-function processMessageQueue() {
-  if (queuedMessages.length > 0) {
-    processMessage(queuedMessages.shift());
-    if (!busy) {
-      processMessageQueue();
+function processMessageQueue(serverId) {
+  if (queuedMessages[serverId].length > 0) {
+    processMessage(queuedMessages[serverId].shift());
+    if (!busy[serverId]) {
+      processMessageQueue(serverId);
     }
   }
 }
