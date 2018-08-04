@@ -4,6 +4,10 @@
   "description": "Text to speech at your command in discord!",
   "main": "parrot.js",
   "author": "Frederick Meyer",
+  "license": "MIT",
+  "scripts": {
+    "start": "node parrot.js"
+  },
   "dependencies": {
     "@google-cloud/text-to-speech": "^0.3.0",
     "discord.js": "^11.3.2",
