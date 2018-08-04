@@ -252,7 +252,7 @@ function processMessage(msg) {
           const request = {
             input: {text: msg.content},
             voice: voiceObj,
-            audioConfig: {audioEncoding: 'MP3'},
+            audioConfig: {audioEncoding: 'OGG_OPUS'},
           };
           ttsClient.synthesizeSpeech(request, (err, response) => {
             if (err) {
@@ -266,7 +266,7 @@ function processMessage(msg) {
             }
            
             // Write the binary audio content to a local file
-            const filename = uuidv4() + '.mp3';
+            const filename = uuidv4() + '.ogg';
             const filepath = path.join(audioTempDir, filename);
             fs.writeFile(filepath, response.audioContent, 'binary', err => {
               if (err) {
@@ -277,7 +277,7 @@ function processMessage(msg) {
               if (currentStreamDispatcher[serverId]) {
                 currentStreamDispatcher[serverId].end();
               }
-              currentStreamDispatcher[serverId] = connection.playFile(filepath);
+              currentStreamDispatcher[serverId] = connection.playFile(filepath, { type: 'ogg/opus' });
               currentStreamDispatcher[serverId].on('error', err => {
                 console.error('ERROR:', err);
                 currentStreamDispatcher[serverId].end();
