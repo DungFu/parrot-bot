@@ -3,7 +3,6 @@ process.env['GOOGLE_APPLICATION_CREDENTIALS'] = path.resolve(__dirname, 'google_
 
 const fs = require('fs');
 const rimraf = require('rimraf');
-const auth = require('./auth.json');
 const uuidv4 = require('uuid/v4');
 const textToSpeech = require('@google-cloud/text-to-speech');
 
@@ -369,4 +368,4 @@ function deleteOldFiles() {
   });
 }
 
-client.login(auth.token);
+client.login(process.env.DISCORD_TOKEN || require('./auth.json').token);
