@@ -260,6 +260,7 @@ function processMessage(msg) {
               busy[serverId] = false;
               processMessageQueue(serverId);
               maybeLeaveVoice(guild);
+              startTimeout(guild);
               return;
             }
 
@@ -276,28 +277,29 @@ function processMessage(msg) {
                 busy[serverId] = false;
                 processMessageQueue(serverId);
                 maybeLeaveVoice(guild);
+                startTimeout(guild);
                 return;
               }
               if (currentStreamDispatcher[serverId]) {
                 currentStreamDispatcher[serverId].end();
               }
               currentStreamDispatcher[serverId] = connection.playFile(filepath);
-              currentStreamDispatcher[serverId].on("end", end => {
+              currentStreamDispatcher[serverId].on('error', err => {
+                console.error('ERROR:', err);
                 busy[serverId] = false;
                 currentStreamDispatcher[serverId] = null;
                 deleteOldFiles();
                 processMessageQueue(serverId);
                 maybeLeaveVoice(guild);
-                if (lastMessageTimeouts[serverId]) {
-                  clearTimeout(lastMessageTimeouts[serverId]);
-                  lastMessageTimeouts[serverId] = null;
-                }
-                lastMessageTimeouts[serverId] = client.setInterval(() => {
-                  if (guild.voiceConnection) {
-                    guild.voiceConnection.disconnect();
-                  }
-                  lastMessageTimeouts[serverId] = null;
-                }, TIMEOUT_DISCONNECT);
+                startTimeout(guild);
+              });
+              currentStreamDispatcher[serverId].on('end', end => {
+                busy[serverId] = false;
+                currentStreamDispatcher[serverId] = null;
+                deleteOldFiles();
+                processMessageQueue(serverId);
+                maybeLeaveVoice(guild);
+                startTimeout(guild);
               });
             });
           });
@@ -365,6 +367,19 @@ function deleteOldFiles() {
       });
     });
   });
+}
+
+function startTimeout(guild) {
+  if (lastMessageTimeouts[guild.id]) {
+    clearTimeout(lastMessageTimeouts[guild.id]);
+    lastMessageTimeouts[guild.id] = null;
+  }
+  lastMessageTimeouts[guild.id] = client.setInterval(() => {
+    if (guild.voiceConnection) {
+      guild.voiceConnection.disconnect();
+    }
+    lastMessageTimeouts[guild.id] = null;
+  }, TIMEOUT_DISCONNECT);
 }
 
 client.login(process.env.DISCORD_TOKEN || require('./auth.json').token);
