@@ -161,8 +161,8 @@ function processMessage(msg) {
     queuedMessages[serverId] = [];
   }
   if (msg.content.substring(0, 1) == '!') {
-    var args = msg.content.substring(1).split(' ');
-    var cmd = args[0];
+    let args = msg.content.substring(1).split(' ');
+    let cmd = args[0];
 
     let inputs;
 
@@ -201,16 +201,15 @@ function processMessage(msg) {
         inputs = msg.content.split('!voice ');
         if (inputs.length > 1) {
           getValidVoices(voices => {
-            for (var i = 0; i < voices.length; i++) {
+            for (let i = 0; i < voices.length; i++) {
               const v = voices[i];
               if (v.name == inputs[1]) {
-                voice = v.name;
-                languageCode = v.languageCodes[0];
+                let languageCode = v.languageCodes[0];
                 db.run('UPDATE Users SET language = ?, voice = ? WHERE id = ?', [languageCode, v.name, msg.author.id], function(err) {
                   if (err) {
                     return console.log(err.message);
                   }
-                  msg.channel.send('Voice set to ' + voice);
+                  msg.channel.send('Voice set to ' + v.name);
                 });              
                 return;
               }
@@ -350,7 +349,7 @@ function deleteOldFiles() {
   fs.readdir(audioTempDir, function(err, files) {
     files.forEach(function(file, index) {
       fs.stat(path.join(audioTempDir, file), function(err, stat) {
-        var endTime, now;
+        let endTime, now;
         if (err) {
           return console.error(err);
         }
