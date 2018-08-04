@@ -257,10 +257,7 @@ function processMessage(msg) {
           ttsClient.synthesizeSpeech(request, (err, response) => {
             if (err) {
               console.error('ERROR:', err);
-              busy[serverId] = false;
-              processMessageQueue(serverId);
-              maybeLeaveVoice(guild);
-              startTimeout(guild);
+              playbackFinished(guild);
               return;
             }
 
@@ -274,10 +271,7 @@ function processMessage(msg) {
             fs.writeFile(filepath, response.audioContent, 'binary', err => {
               if (err) {
                 console.error('ERROR:', err);
-                busy[serverId] = false;
-                processMessageQueue(serverId);
-                maybeLeaveVoice(guild);
-                startTimeout(guild);
+                playbackFinished(guild);
                 return;
               }
               if (currentStreamDispatcher[serverId]) {
@@ -286,20 +280,11 @@ function processMessage(msg) {
               currentStreamDispatcher[serverId] = connection.playFile(filepath);
               currentStreamDispatcher[serverId].on('error', err => {
                 console.error('ERROR:', err);
-                busy[serverId] = false;
-                currentStreamDispatcher[serverId] = null;
-                deleteOldFiles();
-                processMessageQueue(serverId);
-                maybeLeaveVoice(guild);
-                startTimeout(guild);
+                currentStreamDispatcher[serverId].end();
               });
               currentStreamDispatcher[serverId].on('end', end => {
-                busy[serverId] = false;
                 currentStreamDispatcher[serverId] = null;
-                deleteOldFiles();
-                processMessageQueue(serverId);
-                maybeLeaveVoice(guild);
-                startTimeout(guild);
+                playbackFinished(guild);
               });
             });
           });
@@ -380,6 +365,14 @@ function startTimeout(guild) {
     }
     lastMessageTimeouts[guild.id] = null;
   }, TIMEOUT_DISCONNECT);
+}
+
+function playbackFinished(guild) {
+  busy[guild.id] = false;
+  deleteOldFiles();
+  processMessageQueue(guild.id);
+  maybeLeaveVoice(guild);
+  startTimeout(guild);
 }
 
 client.login(process.env.DISCORD_TOKEN || require('./auth.json').token);
