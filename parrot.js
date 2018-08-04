@@ -277,6 +277,9 @@ function processMessage(msg) {
               if (currentStreamDispatcher[serverId]) {
                 currentStreamDispatcher[serverId].end();
               }
+              if (guild.voiceConnection) {
+                guild.voiceConnection.speaking = false;
+              }
               currentStreamDispatcher[serverId] = connection.playFile(filepath);
               currentStreamDispatcher[serverId].on('error', err => {
                 console.error('ERROR:', err);
