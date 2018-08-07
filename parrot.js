@@ -17,8 +17,8 @@ const busy = {};
 const currentStreamDispatcher = {};
 const lastMessageTimeouts = {};
 
-const voicesCache = [];
-const voicesCacheLastUpdate = 0;
+let voicesCache = [];
+let voicesCacheLastUpdate = 0;
 
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('parrotbot.db');
@@ -44,7 +44,7 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
 client.on('error', console.error);
 
 function getValidVoices(callback, options = {}) {
-  const voicesCallback = voices => {
+  const filterVoices = voices => {
     let filteredVoices = null;
     if (options.languageCode) {
       filteredVoices =
@@ -63,7 +63,7 @@ function getValidVoices(callback, options = {}) {
     } else {
       callback(filteredVoices);
     }
-  };
+  }
   const now = Date.now();
   if (voicesCache.length == 0 || now - voicesCacheLastUpdate > 6.048e8) {
     ttsClient
@@ -71,10 +71,10 @@ function getValidVoices(callback, options = {}) {
     .then(results => {
       voicesCache = results[0].voices;
       voicesCacheLastUpdate = now;
-      voicesCallback(voicesCache);
+      filterVoices(voicesCache);
     });
   } else {
-    voicesCallback(voicesCache)
+    filterVoices(voicesCache);
   }
 }
 
