@@ -45,7 +45,6 @@ client.on('error', console.error);
 
 function getValidVoices(callback, options = {}) {
   const voicesCallback = voices => {
-    const voices = results[0].voices;
     let filteredVoices = null;
     if (options.languageCode) {
       filteredVoices =
