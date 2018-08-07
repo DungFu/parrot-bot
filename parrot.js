@@ -17,6 +17,9 @@ const busy = {};
 const currentStreamDispatcher = {};
 const lastMessageTimeouts = {};
 
+const voicesCache = [];
+const voicesCacheLastUpdate = 0;
+
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database('parrotbot.db');
 
@@ -41,29 +44,39 @@ client.on('voiceStateUpdate', (oldMember, newMember) => {
 client.on('error', console.error);
 
 function getValidVoices(callback, options = {}) {
-  ttsClient
+  const voicesCallback = voices => {
+    const voices = results[0].voices;
+    let filteredVoices = null;
+    if (options.languageCode) {
+      filteredVoices =
+        (filteredVoices === null ? voices : filteredVoices).filter(v => {
+          return v.languageCodes.indexOf(options.languageCode) > -1
+        });
+    }
+    if (options.type) {
+      filteredVoices =
+        (filteredVoices === null ? voices : filteredVoices).filter(v => {
+          return v.name.includes(options.type)
+        });
+    }
+    if (filteredVoices === null) {
+      callback(voices);
+    } else {
+      callback(filteredVoices);
+    }
+  };
+  const now = Date.now();
+  if (voicesCache.length == 0 || now - voicesCacheLastUpdate > 6.048e8) {
+    ttsClient
     .listVoices({})
     .then(results => {
-      const voices = results[0].voices;
-      let filteredVoices = null;
-      if (options.languageCode) {
-        filteredVoices =
-          (filteredVoices === null ? voices : filteredVoices).filter(v => {
-            return v.languageCodes.indexOf(options.languageCode) > -1
-          });
-      }
-      if (options.type) {
-        filteredVoices =
-          (filteredVoices === null ? voices : filteredVoices).filter(v => {
-            return v.name.includes(options.type)
-          });
-      }
-      if (filteredVoices === null) {
-        callback(voices);
-      } else {
-        callback(filteredVoices);
-      }
+      voicesCache = results[0].voices;
+      voicesCacheLastUpdate = now;
+      voicesCallback(voicesCache);
     });
+  } else {
+    voicesCallback(voicesCache)
+  }
 }
 
 function getUser(userId, callback) {
