@@ -194,7 +194,7 @@ function processMessage(msg) {
         break;
       case 'random':
         randomizeLanguage(msg.author.id, (languageCode, voice) => {
-          msg.channel.send('Language changed to ' + voice);
+          msg.channel.send('Voice changed to ' + voice + ' for ' + msg.author.username);
         }, {type: 'Wavenet'});
         break;
       case 'voice':
@@ -209,7 +209,7 @@ function processMessage(msg) {
                   if (err) {
                     return console.log(err.message);
                   }
-                  msg.channel.send('Voice set to ' + v.name);
+                  msg.channel.send('Voice set to ' + v.name + ' for ' + msg.author.username);
                 });              
                 return;
               }
