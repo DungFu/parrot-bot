@@ -172,8 +172,8 @@ function processMessage(msg) {
   if (queuedMessages[serverId] === undefined) {
     queuedMessages[serverId] = [];
   }
-  if (msg.content.substring(0, 1) == '!') {
-    let args = msg.content.substring(1).split(' ');
+  if (msg.cleanContent.substring(0, 1) == '!') {
+    let args = msg.cleanContent.substring(1).split(' ');
     let cmd = args[0];
 
     let inputs;
@@ -210,7 +210,7 @@ function processMessage(msg) {
         }, {type: 'Wavenet'});
         break;
       case 'voice':
-        inputs = msg.content.split('!voice ');
+        inputs = msg.cleanContent.split('!voice ');
         if (inputs.length > 1) {
           getValidVoices(voices => {
             for (let i = 0; i < voices.length; i++) {
@@ -262,7 +262,7 @@ function processMessage(msg) {
         voiceChannel.join().then(connection => {
           const voiceObj = {languageCode: user.language, name: user.voice};
           const request = {
-            input: {text: msg.content},
+            input: {text: msg.cleanContent},
             voice: voiceObj,
             audioConfig: {audioEncoding: 'MP3'},
           };
