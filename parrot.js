@@ -25,6 +25,22 @@ const db = new sqlite3.Database('parrotbot.db');
 
 const TIMEOUT_DISCONNECT = 15 * 60 * 1000; // 15 min
 
+const helpString = `
+  Settings for ParrotBot
+
+  !tts : enabled/disable text to speech
+  !stop : stop playing current text to speech message
+  !clear : stop playing current message and cancel all messages in the queue
+  !leave : forces parrot bot to leave the voice channel
+  !random : choose a random new voice
+  !settings: print the help info
+
+  The next settings all relate to the voice
+  See: https://cloud.google.com/text-to-speech/docs/voices
+  -------------------
+  !voice : The voice name (ex: en-US-Wavenet-A)
+`
+
 db.run("CREATE TABLE IF NOT EXISTS Users(id TEXT PRIMARY KEY, language TEXT, voice TEXT, tts_enabled BOOL)");
 
 client.on('ready', () => {
@@ -166,12 +182,20 @@ function setVoice(userId, voice, callback, options = {}) {
 }
 
 function processMessage(msg) {
-  const voiceChannel = msg.member.voice.channel;
-  const guild = msg.member.guild;
-  const serverId = guild.id;
+  const voiceChannel = msg.member && msg.member.voice ? msg.member.voice.channel : null;
+  const guild = msg.member ? msg.member.guild : null;
+  const serverId = guild ? guild.id: null;
   if (queuedMessages[serverId] === undefined) {
     queuedMessages[serverId] = [];
   }
+  
+  if (msg.channel.type === 'dm') {
+    if (msg.author.id !== client.user.id) {
+      msg.channel.send(helpString);
+    }
+    return;
+  }
+  
   if (msg.cleanContent.substring(0, 1) == '!') {
     let args = msg.cleanContent.substring(1).split(' ');
     let cmd = args[0];
@@ -237,20 +261,7 @@ function processMessage(msg) {
         }
         break;
       case 'settings':
-        msg.channel.send(`
-          Settings for ParrotBot
-
-          !tts : enabled/disable text to speech
-          !stop : stop playing current text to speech message
-          !clear : stop playing current message and cancel all messages in the queue
-          !leave : forces parrot bot to leave the voice channel
-          !random : choose a random new voice
-          
-          The next settings all relate to the voice
-          See: https://cloud.google.com/text-to-speech/docs/voices
-          -------------------
-          !voice : The voice name (ex: en-US-Wavenet-A)
-        `);
+        msg.channel.send(helpString);
         break;
     }
   } else if (voiceChannel) {
