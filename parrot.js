@@ -26,19 +26,21 @@ const db = new sqlite3.Database('parrotbot.db');
 const TIMEOUT_DISCONNECT = 15 * 60 * 1000; // 15 min
 
 const helpString = `
-  Settings for ParrotBot
+\`\`\`md
+ParrotBot Settings
+==================
 
-  !tts : enabled/disable text to speech
-  !stop : stop playing current text to speech message
-  !clear : stop playing current message and cancel all messages in the queue
-  !leave : forces parrot bot to leave the voice channel
-  !random : choose a random new voice
-  !settings: print the help info
-
-  The next settings all relate to the voice
+!tts : enabled/disable text to speech
+!random : choose a random new voice
+!settings : print the help info
+!voice : The voice name (ex: en-US-Wavenet-A)
   See: https://cloud.google.com/text-to-speech/docs/voices
-  -------------------
-  !voice : The voice name (ex: en-US-Wavenet-A)
+
+< Can only be done when in a voice channel with ParrotBot >
+!stop : stop playing current text to speech message
+!clear : stop playing current message and cancel all messages in the queue
+!leave : forces parrot bot to leave the voice channel
+\`\`\`
 `
 
 db.run("CREATE TABLE IF NOT EXISTS Users(id TEXT PRIMARY KEY, language TEXT, voice TEXT, tts_enabled BOOL)");
@@ -179,23 +181,17 @@ function setVoice(userId, voice, callback, options = {}) {
   });
 }
 
-function processMessage(msg) {
-  const voiceChannel = msg.member && msg.member.voice ? msg.member.voice.channel : null;
-  const guild = msg.member ? msg.member.guild : null;
-  const serverId = guild ? guild.id: null;
-  if (queuedMessages[serverId] === undefined) {
-    queuedMessages[serverId] = [];
+function processCommandMessage(msg) {
+  const guild = msg.guild;
+  const serverId = guild ? guild.id : null;
+
+  let cleanContent = msg.cleanContent;
+  if (msg.channel.type === 'dm' && cleanContent.charAt(0) !== '!') {
+    cleanContent = "!" + cleanContent;
   }
-  
-  if (msg.channel.type === 'dm') {
-    if (msg.author.id !== client.user.id) {
-      msg.channel.send(helpString);
-    }
-    return;
-  }
-  
-  if (msg.cleanContent.substring(0, 1) == '!') {
-    let args = msg.cleanContent.substring(1).split(' ');
+
+  if (cleanContent.substring(0, 1) === '!') {
+    let args = cleanContent.substring(1).split(' ');
     let cmd = args[0];
 
     let inputs;
@@ -207,32 +203,42 @@ function processMessage(msg) {
           msg.channel.send('Text to speech ' + (tts_enabled ? 'enabled' : 'disabled') + ' for ' + msg.author.username);
           maybeLeaveVoice(guild);
         });
-        break;
+        return true;
       case 'stop':
-        if (currentStreamDispatcher[serverId]) {
-          currentStreamDispatcher[serverId].end();
-          currentStreamDispatcher[serverId] = null;
+        if (serverId) {
+          if (currentStreamDispatcher[serverId]) {
+            currentStreamDispatcher[serverId].end();
+            currentStreamDispatcher[serverId] = null;
+          }
+        } else {
+          msg.channel.send('That command is not supported here');
         }
-        break;
+        return true;
       case 'clear':
-        while (queuedMessages[serverId].length > 0) {
-          queuedMessages[serverId].pop();
+        if (serverId) {
+          while (queuedMessages[serverId].length > 0) {
+            queuedMessages[serverId].pop();
+          }
+          if (currentStreamDispatcher[serverId]) {
+            currentStreamDispatcher[serverId].end();
+            currentStreamDispatcher[serverId] = null;
+          }
+        } else {
+          msg.channel.send('That command is not supported here');
         }
-        if (currentStreamDispatcher[serverId]) {
-          currentStreamDispatcher[serverId].end();
-          currentStreamDispatcher[serverId] = null;
-        }
-        break;
+        return true;
       case 'leave':
-        if (guild.voiceConnection) {
+        if (guild && guild.voiceConnection) {
           guild.voiceConnection.disconnect();
+        } else {
+          msg.channel.send('That command is not supported here');
         }
-        break;
+        return true;
       case 'random':
         randomizeLanguage(msg.author.id, (languageCode, voice) => {
           msg.channel.send('Voice changed to ' + voice + ' for ' + msg.author.username);
         }, {type: 'Wavenet'});
-        break;
+        return true;
       case 'voice':
         inputs = msg.cleanContent.split('!voice ');
         if (inputs.length > 1) {
@@ -257,12 +263,28 @@ function processMessage(msg) {
             msg.channel.send('Current voice: ' + user.voice);
           });
         }
-        break;
+        return true;
       case 'settings':
         msg.channel.send(helpString);
-        break;
+        return true;
+      default:
+        if (msg.channel.type === 'dm' && msg.author.id !== client.user.id) {
+          msg.channel.send(helpString);
+          return true;
+        }
     }
-  } else if (voiceChannel) {
+  }
+  return false;
+}
+
+function processMessage(msg) {
+  const voiceChannel = msg.member && msg.member.voice ? msg.member.voice.channel : null;
+  const guild = msg.guild;
+  const serverId = guild ? guild.id : null;
+  if (queuedMessages[serverId] === undefined) {
+    queuedMessages[serverId] = [];
+  }
+  if (!processCommandMessage(msg) && voiceChannel) {
     getUser(msg.author.id, user => {
       if (user && user.tts_enabled) {
         if (busy[serverId]) {
@@ -316,6 +338,9 @@ function processMessage(msg) {
 }
 
 function maybeLeaveVoice(guild) {
+  if (!guild) {
+    return;
+  }
   const users = {};
   const userIds = [];
   guild.members.forEach(function(guildMember, guildMemberId) {
