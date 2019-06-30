@@ -1,16 +1,16 @@
 const path = require('path');
 process.env['GOOGLE_APPLICATION_CREDENTIALS'] = path.resolve(__dirname, 'google_app_credentials.json')
 
-const fs = require('fs');
+const http = require('http');
+const url = require('url');
+const stream = require('stream');
+const anchorme = require("anchorme").default;
 const rimraf = require('rimraf');
-const uuidv4 = require('uuid/v4');
 const textToSpeech = require('@google-cloud/text-to-speech');
 
 const Discord = require('discord.js');
 const client = new Discord.Client();
 const ttsClient = new textToSpeech.TextToSpeechClient();
-
-const audioTempDir = './temp';
 
 const queuedMessages = {};
 const busy = {};
@@ -166,7 +166,7 @@ function setVoice(userId, voice, callback, options = {}) {
 }
 
 function processMessage(msg) {
-  const voiceChannel = msg.member.voiceChannel;
+  const voiceChannel = msg.member.voice.channel;
   const guild = msg.member.guild;
   const serverId = guild.id;
   if (queuedMessages[serverId] === undefined) {
@@ -189,6 +189,7 @@ function processMessage(msg) {
       case 'stop':
         if (currentStreamDispatcher[serverId]) {
           currentStreamDispatcher[serverId].end();
+          currentStreamDispatcher[serverId] = null;
         }
         break;
       case 'clear':
@@ -197,6 +198,7 @@ function processMessage(msg) {
         }
         if (currentStreamDispatcher[serverId]) {
           currentStreamDispatcher[serverId].end();
+          currentStreamDispatcher[serverId] = null;
         }
         break;
       case 'leave':
@@ -262,9 +264,9 @@ function processMessage(msg) {
         voiceChannel.join().then(connection => {
           const voiceObj = {languageCode: user.language, name: user.voice};
           const request = {
-            input: {text: msg.cleanContent},
+            input: {text: sanitizeText(msg.cleanContent)},
             voice: voiceObj,
-            audioConfig: {audioEncoding: 'MP3'},
+            audioConfig: {audioEncoding: 'OGG_OPUS'},
           };
           ttsClient.synthesizeSpeech(request, (err, response) => {
             if (err) {
@@ -272,39 +274,32 @@ function processMessage(msg) {
               playbackFinished(guild);
               return;
             }
-
-            if (!fs.existsSync(audioTempDir)) {
-              fs.mkdirSync(audioTempDir);
+            
+            if (currentStreamDispatcher[serverId]) {
+              currentStreamDispatcher[serverId].end();
+              currentStreamDispatcher[serverId] = null;
             }
-           
-            // Write the binary audio content to a local file
-            const filename = uuidv4() + '.mp3';
-            const filepath = path.join(audioTempDir, filename);
-            fs.writeFile(filepath, response.audioContent, 'binary', err => {
-              if (err) {
-                console.error('ERROR:', err);
-                playbackFinished(guild);
-                return;
+
+            const readableInstanceStream = new stream.Readable({
+              read() {
+                this.push(response.audioContent);
+                this.push(null);
               }
-              if (currentStreamDispatcher[serverId]) {
-                currentStreamDispatcher[serverId].end();
-              }
-              currentStreamDispatcher[serverId] = connection.playFile(filepath);
-              currentStreamDispatcher[serverId].on('error', err => {
-                console.error('ERROR:', err);
-                currentStreamDispatcher[serverId].end();
-              });
-              currentStreamDispatcher[serverId].on('end', end => {
-                currentStreamDispatcher[serverId] = null;
-                playbackFinished(guild);
-              });
+            });
+            currentStreamDispatcher[serverId] = connection.play(readableInstanceStream);
+            currentStreamDispatcher[serverId].on('error', err => {
+              console.error('ERROR:', err);
+              currentStreamDispatcher[serverId] = null;
+              playbackFinished(guild);
+            });
+            currentStreamDispatcher[serverId].on('end', end => {
+              currentStreamDispatcher[serverId] = null;
+              playbackFinished(guild);
             });
           });
         }).catch(err => {
           console.log(err);
-          busy[serverId] = false;
-          processMessageQueue(serverId);
-          maybeLeaveVoice(guild);
+          playbackFinished(guild);
         });
       }
     });
@@ -344,26 +339,20 @@ function processMessageQueue(serverId) {
   }
 }
 
-function deleteOldFiles() {
-  fs.readdir(audioTempDir, function(err, files) {
-    files.forEach(function(file, index) {
-      fs.stat(path.join(audioTempDir, file), function(err, stat) {
-        let endTime, now;
-        if (err) {
-          return console.error(err);
-        }
-        now = new Date().getTime();
-        endTime = new Date(stat.ctime).getTime() + 300000;
-        if (now > endTime) {
-          return rimraf(path.join(audioTempDir, file), function(err) {
-            if (err) {
-              return console.error(err);
-            }
-          });
-        }
-      });
-    });
+function sanitizeText(cleanContent) {
+  const results = anchorme(cleanContent, {
+    emails: false,
+    files: false,
+    list: true
   });
+  for (var i = 0; i < results.length; i++) {
+    let hostname = url.parse(results[i].protocol + results[i].encoded).hostname;
+    if (!hostname) {
+      continue;
+    }
+    cleanContent = cleanContent.replace(results[i].raw, hostname.startsWith('www.') ? hostname.substring(4) : hostname);
+  }
+  return cleanContent;
 }
 
 function startTimeout(guild) {
@@ -381,10 +370,21 @@ function startTimeout(guild) {
 
 function playbackFinished(guild) {
   busy[guild.id] = false;
-  deleteOldFiles();
   processMessageQueue(guild.id);
   maybeLeaveVoice(guild);
   startTimeout(guild);
 }
 
 client.login(process.env.DISCORD_TOKEN || require('./auth.json').token);
+
+const port = 8080
+
+const requestHandler = (request, response) => {
+  response.end('Parrot Bot is running!')
+}
+
+const server = http.createServer(requestHandler)
+
+server.listen(port, (err) => {
+  console.log(`server is listening on ${port}`)
+})
