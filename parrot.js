@@ -51,10 +51,8 @@ client.on('message', msg => {
   processMessage(msg);
 });
 
-client.on('voiceStateUpdate', (oldMember, newMember) => {
-  if (newMember.voiceChannel === undefined) {
-    maybeLeaveVoice(newMember.guild);
-  }
+client.on('voiceStateUpdate', (oldState, newState) => {
+  maybeLeaveVoice(newState.guild);
 });
 
 client.on('error', console.error);
@@ -318,15 +316,17 @@ function processMessage(msg) {
 }
 
 function maybeLeaveVoice(guild) {
+  const users = {};
   const userIds = [];
   guild.members.forEach(function(guildMember, guildMemberId) {
-    if (guildMember.voiceChannelID) {
+    if (guildMember.voice && guildMember.voice.channel) {
       userIds.push(guildMemberId);
+      users[guildMemberId] = guildMember;
     }
   })
   if (userIds.length === 0) {
-    if (guild.voiceConnection) {
-      guild.voiceConnection.disconnect();
+    if (guild.voice && guild.voice.connection) {
+      guild.voice.connection.disconnect();
     }
     return;
   }
@@ -335,8 +335,20 @@ function maybeLeaveVoice(guild) {
     if (err) {
       return console.log(err.message);
     }
-    if (rows.length === 0 && guild.voiceConnection) {
-      guild.voiceConnection.disconnect();
+    if (guild.voice && guild.voice.connection) {
+      if (rows.length === 0) {
+        guild.voice.connection.disconnect();
+      } else {
+        let foundUserInCurrentChannel = false;
+        rows.forEach(user => {
+          if (users[user.id].voice && users[user.id].voice.channelID === guild.voice.channelID) {
+            foundUserInCurrentChannel = true;
+          }
+        });
+        if (!foundUserInCurrentChannel) {
+          guild.voice.connection.disconnect();
+        }
+      }
     }
   });
 }
@@ -372,8 +384,8 @@ function startTimeout(guild) {
     lastMessageTimeouts[guild.id] = null;
   }
   lastMessageTimeouts[guild.id] = client.setInterval(() => {
-    if (guild.voiceConnection) {
-      guild.voiceConnection.disconnect();
+    if (guild.voice && guild.voice.connection) {
+      guild.voice.connection.disconnect();
     }
     lastMessageTimeouts[guild.id] = null;
   }, TIMEOUT_DISCONNECT);
