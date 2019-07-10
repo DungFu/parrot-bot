@@ -4,6 +4,7 @@ process.env['GOOGLE_APPLICATION_CREDENTIALS'] = path.resolve(__dirname, 'google_
 const http = require('http');
 const url = require('url');
 const stream = require('stream');
+const request = require('request');
 const anchorme = require("anchorme").default;
 const rimraf = require('rimraf');
 const textToSpeech = require('@google-cloud/text-to-speech');
@@ -40,6 +41,7 @@ ParrotBot Settings
 !stop : stop playing current text to speech message
 !clear : stop playing current message and cancel all messages in the queue
 !leave : forces parrot bot to leave the voice channel
+!sound : play sound effect from myinstants.com (use name in url)
 \`\`\`
 `
 
@@ -267,6 +269,24 @@ function processCommandMessage(msg) {
       case 'settings':
         msg.channel.send(helpString);
         return true;
+      case 'sound':
+        if (args.length > 0) {
+          request('https://www.myinstants.com/instant/' + args[0] + '/', (err, res, body) => {
+            const cantFindSound = 'Sound effect: "' + args[0] + '" cannot be found on myinstants.com.';
+            if (err) {
+              msg.channel.send(cantFindSound);
+              return;
+            }
+            var re = /href=\"(\/media\/sounds\/.+\.mp3)\"/i;
+            var found = body.match(re);
+            if (found && found.length > 1) {
+              playSoundFromUrl(msg, 'https://www.myinstants.com' + found[1]);
+            } else {
+              msg.channel.send(cantFindSound);
+            }
+          });
+        }
+        return true;
       default:
         if (msg.channel.type === 'dm' && msg.author.id !== client.user.id) {
           msg.channel.send(helpString);
@@ -275,6 +295,38 @@ function processCommandMessage(msg) {
     }
   }
   return false;
+}
+
+function playSoundFromUrl(msg, url) {
+  const voiceChannel = msg.member && msg.member.voice ? msg.member.voice.channel : null;
+  const guild = msg.guild;
+  const serverId = guild ? guild.id : null;
+  if (queuedMessages[serverId] === undefined) {
+    queuedMessages[serverId] = [];
+  }
+  if (voiceChannel) {
+    getUser(msg.author.id, user => {
+      if (user && user.tts_enabled) {
+        if (busy[serverId]) {
+          queuedMessages[serverId].push(msg);
+          return;
+        }
+        busy[serverId] = true;
+        voiceChannel.join().then(connection => {
+          currentStreamDispatcher[serverId] = connection.play(url);
+          currentStreamDispatcher[serverId].on('error', err => {
+            console.error('ERROR:', err);
+            currentStreamDispatcher[serverId] = null;
+            playbackFinished(guild);
+          });
+          currentStreamDispatcher[serverId].on('end', end => {
+            currentStreamDispatcher[serverId] = null;
+            playbackFinished(guild);
+          });
+        });
+      }
+    });
+  }
 }
 
 function processMessage(msg) {
