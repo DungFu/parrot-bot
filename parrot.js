@@ -41,7 +41,7 @@ ParrotBot Settings
 !stop : stop playing current text to speech message
 !clear : stop playing current message and cancel all messages in the queue
 !leave : forces parrot bot to leave the voice channel
-!sound : play sound effect from myinstants.com (use name in url)
+!sound : play sound effect from myinstants.com (use name of sound)
 \`\`\`
 `
 
@@ -270,14 +270,15 @@ function processCommandMessage(msg) {
         msg.channel.send(helpString);
         return true;
       case 'sound':
-        if (args.length > 0) {
-          request('https://www.myinstants.com/instant/' + args[0] + '/', (err, res, body) => {
-            const cantFindSound = 'Sound effect: "' + args[0] + '" cannot be found on myinstants.com.';
+        inputs = msg.cleanContent.split('!sound ');
+        if (inputs.length > 1) {
+          request('https://www.myinstants.com/search/?name=' + encodeURIComponent(inputs[1]), (err, res, body) => {
+            const cantFindSound = 'Sound effect: "' + inputs[1] + '" cannot be found on myinstants.com.';
             if (err) {
               msg.channel.send(cantFindSound);
               return;
             }
-            var re = /href=\"(\/media\/sounds\/.+\.mp3)\"/i;
+            var re = /onmousedown=\"play\(\'(\/media\/sounds\/.+\.mp3)\'\)"/i;
             var found = body.match(re);
             if (found && found.length > 1) {
               playSoundFromUrl(msg, 'https://www.myinstants.com' + found[1]);
