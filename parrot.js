@@ -187,7 +187,7 @@ function processCommandMessage(msg) {
   const guild = msg.guild;
   const serverId = guild ? guild.id : null;
 
-  let cleanContent = msg.cleanContent;
+  let cleanContent = msg.cleanContent.toLowerCase();
   if (msg.channel.type === 'dm' && cleanContent.charAt(0) !== '!') {
     cleanContent = "!" + cleanContent;
   }
@@ -242,12 +242,12 @@ function processCommandMessage(msg) {
         }, {type: 'Wavenet'});
         return true;
       case 'voice':
-        inputs = msg.cleanContent.split('!voice ');
+        inputs = cleanContent.split('!voice ');
         if (inputs.length > 1) {
           getValidVoices(voices => {
             for (let i = 0; i < voices.length; i++) {
               const v = voices[i];
-              if (v.name == inputs[1]) {
+              if (v.name.toLowerCase() == inputs[1]) {
                 let languageCode = v.languageCodes[0];
                 db.run('UPDATE Users SET language = ?, voice = ? WHERE id = ?', [languageCode, v.name, msg.author.id], function(err) {
                   if (err) {
@@ -270,7 +270,7 @@ function processCommandMessage(msg) {
         msg.channel.send(helpString);
         return true;
       case 'sound':
-        inputs = msg.cleanContent.split('!sound ');
+        inputs = cleanContent.split('!sound ');
         if (inputs.length > 1) {
           request('https://www.myinstants.com/search/?name=' + encodeURIComponent(inputs[1]), (err, res, body) => {
             const cantFindSound = 'Sound effect: "' + inputs[1] + '" cannot be found on myinstants.com.';
@@ -370,7 +370,7 @@ function processMessage(msg) {
                 this.push(null);
               }
             });
-            currentStreamDispatcher[serverId] = connection.play(readableInstanceStream);
+            currentStreamDispatcher[serverId] = connection.play(readableInstanceStream, { type: 'ogg/opus' });
             currentStreamDispatcher[serverId].on('error', err => {
               console.error('ERROR:', err);
               currentStreamDispatcher[serverId] = null;
